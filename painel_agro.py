@@ -16,13 +16,13 @@ st.sidebar.header("⚙️ Filtros Inteligentes AGCO")
 est_disp = ["Mato Grosso (MT)", "Maranhão (MA)", "Tocantins (TO)", "Piauí (PI)", "Bahia (BA)"]
 est_sel = st.sidebar.multiselect("1. Selecione os Estados para Análise:", options=est_disp, default=["Mato Grosso (MT)"])
 
-# UTILIZANDO A URL COMPLETA DE EXPORTAÇÃO PARA FORÇAR O DOWNLOAD DIRETO SEM DEPENDER DE PARAMETRIZAÇÃO INDIRETA
+# INFRAESTRUTURA DE ALTA VELOCIDADE: Links diretos via Hugging Face (Sem travas de segurança do Drive)
 links_nuvem = {
-    "Mato Grosso (MT)": "https://google.com",
-    "Maranhão (MA)": "https://google.com",
-    "Tocantins (TO)": "https://google.com",
-    "Piauí (PI)": "https://google.com",
-    "Bahia (BA)": "https://google.com"
+    "Mato Grosso (MT)": "https://huggingface.co",
+    "Maranhão (MA)": "https://huggingface.co",
+    "Tocantins (TO)": "https://huggingface.co",
+    "Piauí (PI)": "https://huggingface.co",
+    "Bahia (BA)": "https://huggingface.co"
 }
 
 faixas = [
@@ -55,13 +55,16 @@ for e in est_sel:
             pasta_extracao = f"dados_extraidos_{e.replace(' ', '_')}"
             
             try:
+                # Requisição direta de alta performance
                 with requests.get(url_direta, stream=True) as r:
                     r.raise_for_status()
                     with open(caminho_zip, 'wb') as f:
-                        for chunk in r.iter_content(chunk_size=8192):
+                        for chunk in r.iter_content(chunk_size=16384):
                             f.write(chunk)
+                            
                 with zipfile.ZipFile(caminho_zip, 'r') as zip_ref:
                     zip_ref.extractall(pasta_extracao)
+                    
                 arquivo_shp = next((os.path.join(pasta_extracao, f) for f in os.listdir(pasta_extracao) if f.endswith('.shp')), None)
                 if arquivo_shp:
                     gdf = gpd.read_file(arquivo_shp, ignore_geometry=True)
@@ -89,7 +92,6 @@ for e in est_sel:
 
 if listas_dfs:
     df_bruto = pd.concat(listas_dfs, ignore_index=True)
-    
     c_mun = next((c for c in df_bruto.columns if any(p in c for p in ['MUN', 'CID', 'NOME', 'MUNIC', 'NM_'])), None)
     c_cod = next((c for c in df_bruto.columns if any(p in c for p in ['COD_IMOVEL', 'NUM_CERTIF', 'CODIGO', 'COD_CAR', 'COD', 'ID_IMOVEL'])), None)
     
@@ -175,7 +177,7 @@ if listas_dfs:
         
     if dados_calor:
         HeatMap(dados_calor, radius=24, blur=18, max_zoom=10).add_to(mapa)
-        st_folium(mapa, width=1200, height=480, key="mapa_calor_agco_prime_online_v7")
+        st_folium(mapa, width=1200, height=480, key="mapa_calor_agco_prime_online_v8")
 
     st.markdown("---")
 
