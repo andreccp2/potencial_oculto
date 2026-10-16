@@ -1,0 +1,11 @@
+pip
+setuptools
+pandas
+numpy
+requests
+fiona
+pyproj
+geopandas
+folium
+streamlit-folium
+streamlit
