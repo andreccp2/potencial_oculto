@@ -14,13 +14,14 @@ st.markdown("Mapeamento e inteligência comercial focados em conversão de pasta
 @st.cache_data(max_entries=5, ttl=86400) # Mantém os dados em cache por 24 horas para performance máxima
 def baixar_e_carregar_nuvem(file_id, nome_estado):
     """Baixa o arquivo compactado do Google Drive e realiza o saneamento estrito em memória."""
-    # Monta a URL oficial de download direto da API do Google Drive usando o ID do arquivo
+    # LINK CORRIGIDO DE DOWNLOAD DIRETO VIA API DO GOOGLE DRIVE
     url_direta = f"https://google.com{file_id}"
+        
     caminho_zip = f"dados_temporarios_{nome_estado.replace(' ', '_')}.zip"
     pasta_extracao = f"dados_extraidos_{nome_estado.replace(' ', '_')}"
     
     try:
-        # Download do arquivo pesado em blocs (Stream) para não estourar a memória RAM do servidor
+        # Download do arquivo pesado em blocos (Stream) para não estourar a memória RAM do servidor
         with requests.get(url_direta, stream=True) as r:
             r.raise_for_status()
             with open(caminho_zip, 'wb') as f:
@@ -264,4 +265,3 @@ if listas_dfs:
         df_g_render = df_cidades.copy()
         st.success(f"Market Share Mapeado: Localizadas {df_g_render['QTD_FAZENDAS_GRANDES_ALVO'].sum()} propriedades somando {df_g_render['TERRITÓRIO_TOTAL_MAPEADO_HA'].sum():,.2f} Hectares.")
         st.dataframe(df_g_render, use_container_width=True)
-
