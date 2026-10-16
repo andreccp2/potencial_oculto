@@ -16,7 +16,6 @@ def baixar_e_carregar_nuvem(file_id, nome_estado):
     """Baixa o arquivo compactado do Google Drive e realiza o saneamento estrito em memória."""
     # Monta a URL oficial de download direto da API do Google Drive usando o ID do arquivo
     url_direta = f"https://google.com{file_id}"
-        
     caminho_zip = f"dados_temporarios_{nome_estado.replace(' ', '_')}.zip"
     pasta_extracao = f"dados_extraidos_{nome_estado.replace(' ', '_')}"
     
