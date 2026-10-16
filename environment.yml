@@ -1,0 +1,13 @@
+name: potencial_oculto
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - geopandas
+  - pandas
+  - numpy
+  - requests
+  - folium
+  - streamlit-folium
+  - streamlit
