@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import requests
 import os
-from simpledbf import SimpleDbf
 
 # Configuração e Título da Aplicação de Alta Escala
 st.set_page_config(page_title="POTÊNCIAL OCULTO AGCO PRIME", layout="wide")
@@ -11,32 +10,28 @@ st.title("POTÊNCIAL OCULTO AGCO PRIME")
 st.markdown("Mapeamento e inteligência comercial focados em conversão de pastagens e expansão de área útil.")
 
 @st.cache_data(max_entries=5, ttl=86400)
-def carregar_dados_dbf_drive(file_id, nome_estado):
-    """Baixa o arquivo .dbf da pasta descompactada do Drive e converte em DataFrame instantaneamente."""
+def carregar_dados_tabela_drive(file_id, nome_estado):
+    """Baixa o arquivo tabular da pasta descompactada do Drive e converte em DataFrame instantaneamente."""
+    # Estrutura de download direto via API de arquivos do Google Drive
     url_direta = f"https://google.com{file_id}"
-    caminho_dbf = f"temp_{nome_estado.replace(' ', '_')}.dbf"
     
     try:
-        # Download rápido do arquivo de atributos em blocos
-        with requests.get(url_direta, stream=True) as r:
-            r.raise_for_status()
-            with open(caminho_dbf, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-                    
-        # Converte o arquivo DBF nativo para DataFrame do Pandas
-        dbf = SimpleDbf(caminho_dbf)
-        df = dbf.to_dataframe()
+        # Tenta ler diretamente como CSV. Caso a estrutura seja delimitada, o pandas infere ou fallback automático
+        try:
+            df = pd.read_csv(url_direta, encoding="utf-8", low_memory=False)
+        except Exception:
+            df = pd.read_csv(url_direta, encoding="latin1", low_memory=False)
+            
         df.columns = [c.upper().strip() for c in df.columns]
         
         # 1. Filtro de Compliance Cadastral Estrito (Exclui cancelados e o código "CA")
         c_st = next((c for c in df.columns if any(p in c for p in ['STATUS', 'STAT', 'SITUA', 'SITUACAO', 'IND_STAT'])), None)
         if c_st:
             excluir = ["DES_CONDIC", "CANCELADO POR DECISAO ADMINISTRATIVA", "CANCELADO POR DUPLICIDADE", "CANCELADO POR DECISAO JUDICIAL", "CA", "CANCELADO", "SUSPENSO"]
-            df['ST_LIMPAR'] = df[c_st].astype(str).str.upper().str.strip().str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
+            df['ST_LIMPAR'] = df[c_st].astype(str).str.upper().str.strip()
             df = df[~df['ST_LIMPAR'].isin(excluir)].drop(columns=['ST_LIMPAR'])
         
-        # 2. Padronização Inteligente de Métricas de Área (m² para Hectares se necessário)
+        # 2. Padronização Inteligente de Métricas de Área (m² para Hectares se detectado valor bruto em m²)
         c_ha, c_orig = 'AREA_HECTARES_CALCULADA', next((c for c in df.columns if any(p in c for p in ['AREA_HA', 'HECTARES', 'NUM_AREA', 'AREA', 'HA'])), None)
         if c_orig and c_orig in df.columns:
             df[c_orig] = pd.to_numeric(df[c_orig], errors='coerce').fillna(0.0)
@@ -48,25 +43,21 @@ def carregar_dados_dbf_drive(file_id, nome_estado):
         return df
         
     except Exception as e:
-        st.error(f"Erro ao processar atributos da pasta de {nome_estado}: {e}")
+        st.error(f"Erro ao processar os dados da planilha de {nome_estado}: {e}")
         return None
-        
-    finally:
-        if os.path.exists(caminho_dbf):
-            os.remove(caminho_dbf)
 
 # --- CONFIGURAÇÃO DE FILTROS LATERAIS RESTRUTURADOS ---
 st.sidebar.header("⚙️ Filtros Inteligentes AGCO")
 est_disp = ["Mato Grosso (MT)", "Maranhão (MA)", "Tocantins (TO)", "Piauí (PI)", "Bahia (BA)"]
 est_sel = st.sidebar.multiselect("1. Selecione os Estados para Análise:", options=est_disp, default=["Mato Grosso (MT)"])
 
-# INIRA OS IDS DOS ARQUIVOS .DBF QUE ESTÃO DENTRO DE CADA PASTA DO SEU DRIVE
+# MAPEAMENTO DOS LINKS ENVIADOS COM OS IDS EXTRAÍDOS CIRURGICAMENTE
 links_nuvem = {
-    "Mato Grosso (MT)": "INSIRA_AQUI_O_ID_DO_ARQUIVO_DBF_DE_MATO_GROSSO",
-    "Maranhão (MA)": "1ASBtLXNt8ebFLfI8niQmyYWyNWxvq_8K",
-    "Tocantins (TO)": "1ooHod8YE7RP6ka-M9WMIe8iAzTXfjdok",
-    "Piauí (PI)": "1Yjn8cwM_wGyDBZYfbUjN4ZEe_yLtYyOz",
-    "Bahia (BA)": "1woioovdMF7XbWpiw3TAACdTScreAv5AK"
+    "Mato Grosso (MT)": "1nmo8F8AGYl6D3JBny27kBwmxvacQ0ULs",
+    "Maranhão (MA)": "1XISYvnUBNZST-b0DdvsxNNvqwAP0gWi7",
+    "Tocantins (TO)": "1vbDZqyu2t1VjH9_JvNcSlfpOZueQwPAX",
+    "Piauí (PI)": "1Xicg6s9YfcK6ZHQL6OEyrcolUGBRZ49X",
+    "Bahia (BA)": "1gQ2ZbcwojchhbnovBa4zRjlUqA1tjJRV"
 }
 faixas = [
     "De 500 a 2.000 ha", "De 2.000 a 5.000 ha", "De 5.000 a 10.000 ha", "De 10.000 a 15.000 ha",
@@ -93,8 +84,8 @@ polos_regionais_agro = {
 listas_dfs = []
 for e in est_sel:
     if e in links_nuvem:
-        with st.spinner(f"Processando atributos de {e} em alta velocidade..."):
-            df_uf = carregar_dados_dbf_drive(links_nuvem[e], e)
+        with st.spinner(f"Baixando e analisando registros consolidados de {e}..."):
+            df_uf = carregar_dados_tabela_drive(links_nuvem[e], e)
             if df_uf is not None: listas_dfs.append(df_uf)
 
 if listas_dfs:
@@ -129,7 +120,7 @@ if listas_dfs:
                 area_formatada = f"{area_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 st.metric(label=f"Área disponível em {estado}", value=f"{area_formatada}\nha")
 
-    # 🔥 MAPA DE CALOR CONSOLIDADO
+    # 🔥 MAPA DE DISTRIBUIÇÃO REGIONAL AGCO PRIME
     from streamlit_folium import st_folium
     import folium
     from folium.plugins import HeatMap
@@ -164,7 +155,7 @@ if listas_dfs:
         
     if dados_calor:
         HeatMap(dados_calor, radius=24, blur=18, max_zoom=10).add_to(mapa)
-        st_folium(mapa, width=1200, height=480, key="mapa_dbf_v12")
+        st_folium(mapa, width=1200, height=480, key="mapa_final_agco_v13")
 
     st.markdown("---")
     aba_ind, aba_con = st.tabs(["📋 Lista de Fazendas com Aptidão", "🎯 Maiores Polos de Expansão"])
@@ -177,3 +168,5 @@ if listas_dfs:
         
     with aba_con:
         st.dataframe(df_cidades, use_container_width=True)
+else:
+    st.info("Selecione pelo menos um estado na barra lateral para carregar a inteligência de mercado.")
