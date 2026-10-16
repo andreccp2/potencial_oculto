@@ -71,20 +71,15 @@ def baixar_e_carregar_nuvem(file_id, nome_estado):
 def obter_coordenadas_municipios():
     """Dicionário geográfico expandido focado nas maiores potências agrícolas regionais."""
     return {
-        # Maranhão
         "BALSAS": (-7.53, -46.03), "BOM JARDIM": (-3.56, -45.99), "ALTO PARNAIBA": (-9.11, -45.93), 
         "SAO BENTO": (-2.69, -44.82), "GRAJAÚ": (-5.75, -46.13), "IMPERATRIZ": (-5.52, -47.47),
-        # Bahia
         "FORMOSA DO RIO PRETO": (-11.04, -45.19), "SAO DESIDERIO": (-12.36, -44.97), "CORRENTINA": (-13.34, -44.63),
         "BARREIRAS": (-12.15, -45.00), "LUÍS EDUARDO MAGALHÃES": (-12.09, -45.79),
-        # Piauí
         "CANTO DO BURITI": (-8.11, -42.94), "BAIXA GRANDE DO RIBEIRO": (-7.84, -44.52), 
         "URUÇUÍ": (-7.23, -44.55), "RIBEIRO GONÇALVES": (-7.55, -45.24),
-        # Mato Grosso
         "SORRISO": (-12.54, -55.71), "SINOP": (-11.86, -55.50), "LUCAS DO RIO VERDE": (-13.05, -55.91),
         "NOVA MUTUM": (-13.83, -56.08), "QUERENCIA": (-12.60, -52.18), "CAMPO NOVO DO PARECIS": (-13.67, -57.89),
         "SAPEZAL": (-13.54, -58.81), "PRIMAVERA DO LESTE": (-15.55, -54.30), "RONDONÓPOLIS": (-16.46, -54.63),
-        # Tocantins
         "MATEIROS": (-10.54, -46.42), "PORTO NACIONAL": (-10.70, -48.41), "DIANÓPOLIS": (-11.62, -46.81),
         "GURUPI": (-11.72, -49.06), "ARAGUAÍNA": (-7.19, -48.20)
     }
