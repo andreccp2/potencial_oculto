@@ -1,8 +1,9 @@
 import streamlit as st
-import geopandas as gpd
 import pandas as pd
 import numpy as np
+import requests
 import os
+from simpledbf import SimpleDbf
 
 # Configuração e Título da Aplicação de Alta Escala
 st.set_page_config(page_title="POTÊNCIAL OCULTO AGCO PRIME", layout="wide")
@@ -10,57 +11,62 @@ st.title("POTÊNCIAL OCULTO AGCO PRIME")
 st.markdown("Mapeamento e inteligência comercial focados em conversão de pastagens e expansão de área útil.")
 
 @st.cache_data(max_entries=5, ttl=86400)
-def carregar_pasta_descompactada(caminho_pasta, nome_estado):
-    """Varre um diretório descompactado existente e carrega o Shapefile diretamente da estrutura."""
+def carregar_dados_dbf_drive(file_id, nome_estado):
+    """Baixa o arquivo .dbf da pasta descompactada do Drive e converte em DataFrame instantaneamente."""
+    url_direta = f"https://google.com{file_id}"
+    caminho_dbf = f"temp_{nome_estado.replace(' ', '_')}.dbf"
+    
     try:
-        if not os.path.exists(caminho_pasta):
-            st.error(f"Diretório não encontrado: {caminho_pasta}")
-            return None
-            
-        # Localiza diretamente o arquivo .shp dentro da pasta informada
-        arquivo_shp = next((os.path.join(caminho_pasta, f) for f in os.listdir(caminho_pasta) if f.endswith('.shp')), None)
-        if not arquivo_shp:
-            st.error(f"Nenhum arquivo .shp encontrado na pasta de {nome_estado}")
-            return None
+        # Download rápido do arquivo de atributos em blocos
+        with requests.get(url_direta, stream=True) as r:
+            r.raise_for_status()
+            with open(caminho_dbf, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    
+        # Converte o arquivo DBF nativo para DataFrame do Pandas
+        dbf = SimpleDbf(caminho_dbf)
+        df = dbf.to_dataframe()
+        df.columns = [c.upper().strip() for c in df.columns]
         
-        # Leitura direta do arquivo vetorial (apenas atributos analíticos para performance)
-        gdf = gpd.read_file(arquivo_shp, ignore_geometry=True)
-        gdf.columns = [c.upper().strip() for c in gdf.columns]
-        
-        # 1. Filtro de Compliance Cadastral Estrito (Exclui o código "CA" e cancelados)
-        c_st = next((c for c in gdf.columns if any(p in c for p in ['STATUS', 'STAT', 'SITUA', 'SITUACAO', 'IND_STAT'])), None)
+        # 1. Filtro de Compliance Cadastral Estrito (Exclui cancelados e o código "CA")
+        c_st = next((c for c in df.columns if any(p in c for p in ['STATUS', 'STAT', 'SITUA', 'SITUACAO', 'IND_STAT'])), None)
         if c_st:
             excluir = ["DES_CONDIC", "CANCELADO POR DECISAO ADMINISTRATIVA", "CANCELADO POR DUPLICIDADE", "CANCELADO POR DECISAO JUDICIAL", "CA", "CANCELADO", "SUSPENSO"]
-            gdf['ST_LIMPAR'] = gdf[c_st].astype(str).str.upper().str.strip().str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
-            gdf = gdf[~gdf['ST_LIMPAR'].isin(excluir)].drop(columns=['ST_LIMPAR'])
+            df['ST_LIMPAR'] = df[c_st].astype(str).str.upper().str.strip().str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
+            df = df[~df['ST_LIMPAR'].isin(excluir)].drop(columns=['ST_LIMPAR'])
         
-        # 2. Conversão e Padronização de Métricas de Área (m² para Hectares se necessário)
-        c_ha, c_orig = 'AREA_HECTARES_CALCULADA', next((c for c in gdf.columns if any(p in c for p in ['AREA_HA', 'HECTARES', 'NUM_AREA', 'AREA', 'HA'])), None)
-        if c_orig and c_orig in gdf.columns:
-            gdf[c_orig] = pd.to_numeric(gdf[c_orig], errors='coerce').fillna(0.0)
-            gdf[c_ha] = (gdf[c_orig] / 10000.0).round(2) if gdf[c_orig].max() > 1000000 else gdf[c_orig].round(2)
+        # 2. Padronização Inteligente de Métricas de Área (m² para Hectares se necessário)
+        c_ha, c_orig = 'AREA_HECTARES_CALCULADA', next((c for c in df.columns if any(p in c for p in ['AREA_HA', 'HECTARES', 'NUM_AREA', 'AREA', 'HA'])), None)
+        if c_orig and c_orig in df.columns:
+            df[c_orig] = pd.to_numeric(df[c_orig], errors='coerce').fillna(0.0)
+            df[c_ha] = (df[c_orig] / 10000.0).round(2) if df[c_orig].max() > 1000000 else df[c_orig].round(2)
         else:
-            gdf[c_ha] = 0.0
+            df[c_ha] = 0.0
             
-        gdf['ESTADO_ORIGEM'] = nome_estado
-        return gdf
+        df['ESTADO_ORIGEM'] = nome_estado
+        return df
         
     except Exception as e:
-        st.error(f"Erro no processamento da pasta descompactada de {nome_estado}: {e}")
+        st.error(f"Erro ao processar atributos da pasta de {nome_estado}: {e}")
         return None
+        
+    finally:
+        if os.path.exists(caminho_dbf):
+            os.remove(caminho_dbf)
 
 # --- CONFIGURAÇÃO DE FILTROS LATERAIS RESTRUTURADOS ---
 st.sidebar.header("⚙️ Filtros Inteligentes AGCO")
 est_disp = ["Mato Grosso (MT)", "Maranhão (MA)", "Tocantins (TO)", "Piauí (PI)", "Bahia (BA)"]
 est_sel = st.sidebar.multiselect("1. Selecione os Estados para Análise:", options=est_disp, default=["Mato Grosso (MT)"])
 
-# MAUEMENTO DE DIRETÓRIOS FISICOS (Substitua pelos caminhos das pastas no seu ambiente/OneDrive)
-caminhos_pastas = {
-    "Mato Grosso (MT)": "caminho_da_sua_pasta/Mato_Grosso_MT",
-    "Maranhão (MA)": "caminho_da_sua_pasta/Maranhao_MA",
-    "Tocantins (TO)": "caminho_da_sua_pasta/Tocantins_TO",
-    "Piauí (PI)": "caminho_da_sua_pasta/Piauhi_PI",
-    "Bahia (BA)": "caminho_da_sua_pasta/Bahia_BA"
+# INIRA OS IDS DOS ARQUIVOS .DBF QUE ESTÃO DENTRO DE CADA PASTA DO SEU DRIVE
+links_nuvem = {
+    "Mato Grosso (MT)": "INSIRA_AQUI_O_ID_DO_ARQUIVO_DBF_DE_MATO_GROSSO",
+    "Maranhão (MA)": "1ASBtLXNt8ebFLfI8niQmyYWyNWxvq_8K",
+    "Tocantins (TO)": "1ooHod8YE7RP6ka-M9WMIe8iAzTXfjdok",
+    "Piauí (PI)": "1Yjn8cwM_wGyDBZYfbUjN4ZEe_yLtYyOz",
+    "Bahia (BA)": "1woioovdMF7XbWpiw3TAACdTScreAv5AK"
 }
 faixas = [
     "De 500 a 2.000 ha", "De 2.000 a 5.000 ha", "De 5.000 a 10.000 ha", "De 10.000 a 15.000 ha",
@@ -86,11 +92,10 @@ polos_regionais_agro = {
 
 listas_dfs = []
 for e in est_sel:
-    if e in caminhos_pastas:
-        with st.spinner(f"Fazendo varredura na pasta descompactada de {e}..."):
-            df_uf = carregar_pasta_descompactada(caminhos_pastas[e], e)
-            if df_uf is not None: 
-                listas_dfs.append(df_uf)
+    if e in links_nuvem:
+        with st.spinner(f"Processando atributos de {e} em alta velocidade..."):
+            df_uf = carregar_dados_dbf_drive(links_nuvem[e], e)
+            if df_uf is not None: listas_dfs.append(df_uf)
 
 if listas_dfs:
     df_bruto = pd.concat(listas_dfs, ignore_index=True)
@@ -124,7 +129,7 @@ if listas_dfs:
                 area_formatada = f"{area_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 st.metric(label=f"Área disponível em {estado}", value=f"{area_formatada}\nha")
 
-    # 🔥 MAPA DE CALOR ESTÁVEL
+    # 🔥 MAPA DE CALOR CONSOLIDADO
     from streamlit_folium import st_folium
     import folium
     from folium.plugins import HeatMap
@@ -152,14 +157,14 @@ if listas_dfs:
         gerador_estavel = np.random.default_rng(semente_fixa)
         
         polo_escolhido = polos_estado[semente_fixa % len(polos_estado)]
-        lat = polo_escolhido[0] + gerador_estavel.uniform(-0.8, 0.8)
-        lon = polo_escolhido[1] + gerador_estavel.uniform(-0.8, 0.8)
+        lat = polo_escolhido + gerador_estavel.uniform(-0.8, 0.8)
+        lon = polo_escolhido + gerador_estavel.uniform(-0.8, 0.8)
         
         dados_calor.append([lat, lon, float(row['TERRITÓRIO_TOTAL_MAPEADO_HA'])])
         
     if dados_calor:
         HeatMap(dados_calor, radius=24, blur=18, max_zoom=10).add_to(mapa)
-        st_folium(mapa, width=1200, height=480, key="mapa_descompactado_v11")
+        st_folium(mapa, width=1200, height=480, key="mapa_dbf_v12")
 
     st.markdown("---")
     aba_ind, aba_con = st.tabs(["📋 Lista de Fazendas com Aptidão", "🎯 Maiores Polos de Expansão"])
@@ -172,5 +177,3 @@ if listas_dfs:
         
     with aba_con:
         st.dataframe(df_cidades, use_container_width=True)
-else:
-    st.info("Aguardando definição e mapeamento dos diretórios locais.")
