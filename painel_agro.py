@@ -11,17 +11,13 @@ st.markdown("Mapeamento e inteligência comercial focados em conversão de pasta
 
 @st.cache_data(max_entries=5, ttl=86400)
 def carregar_dados_tabela_drive(file_id, nome_estado):
-    """Baixa o arquivo tabular da pasta descompactada do Drive e converte em DataFrame instantaneamente."""
-    # Estrutura de download direto via API de arquivos do Google Drive
-    url_direta = f"https://google.com{file_id}"
+    """Baixa o arquivo da pasta descompactada usando o endpoint estável de exportação do Google Sheets."""
+    # Rota profissional que converte a planilha do Drive em CSV em tempo real na memória do servidor
+    url_direta = f"https://google.com{file_id}/export?format=csv"
     
     try:
-        # Tenta ler diretamente como CSV. Caso a estrutura seja delimitada, o pandas infere ou fallback automático
-        try:
-            df = pd.read_csv(url_direta, encoding="utf-8", low_memory=False)
-        except Exception:
-            df = pd.read_csv(url_direta, encoding="latin1", low_memory=False)
-            
+        # Download e leitura instantânea em alta performance
+        df = pd.read_csv(url_direta, encoding="utf-8", low_memory=False)
         df.columns = [c.upper().strip() for c in df.columns]
         
         # 1. Filtro de Compliance Cadastral Estrito (Exclui cancelados e o código "CA")
@@ -31,7 +27,7 @@ def carregar_dados_tabela_drive(file_id, nome_estado):
             df['ST_LIMPAR'] = df[c_st].astype(str).str.upper().str.strip()
             df = df[~df['ST_LIMPAR'].isin(excluir)].drop(columns=['ST_LIMPAR'])
         
-        # 2. Padronização Inteligente de Métricas de Área (m² para Hectares se detectado valor bruto em m²)
+        # 2. Padronização de Métricas de Área (m² para Hectares se detectado valor em m²)
         c_ha, c_orig = 'AREA_HECTARES_CALCULADA', next((c for c in df.columns if any(p in c for p in ['AREA_HA', 'HECTARES', 'NUM_AREA', 'AREA', 'HA'])), None)
         if c_orig and c_orig in df.columns:
             df[c_orig] = pd.to_numeric(df[c_orig], errors='coerce').fillna(0.0)
@@ -51,7 +47,7 @@ st.sidebar.header("⚙️ Filtros Inteligentes AGCO")
 est_disp = ["Mato Grosso (MT)", "Maranhão (MA)", "Tocantins (TO)", "Piauí (PI)", "Bahia (BA)"]
 est_sel = st.sidebar.multiselect("1. Selecione os Estados para Análise:", options=est_disp, default=["Mato Grosso (MT)"])
 
-# MAPEAMENTO DOS LINKS ENVIADOS COM OS IDS EXTRAÍDOS CIRURGICAMENTE
+# MAPA DE IDS ATUALIZADO COM OS SEUS LINKS DO DRIVE
 links_nuvem = {
     "Mato Grosso (MT)": "1nmo8F8AGYl6D3JBny27kBwmxvacQ0ULs",
     "Maranhão (MA)": "1XISYvnUBNZST-b0DdvsxNNvqwAP0gWi7",
@@ -84,7 +80,7 @@ polos_regionais_agro = {
 listas_dfs = []
 for e in est_sel:
     if e in links_nuvem:
-        with st.spinner(f"Baixando e analisando registros consolidados de {e}..."):
+        with st.spinner(f"Acessando e consolidando registros de {e}..."):
             df_uf = carregar_dados_tabela_drive(links_nuvem[e], e)
             if df_uf is not None: listas_dfs.append(df_uf)
 
@@ -120,7 +116,7 @@ if listas_dfs:
                 area_formatada = f"{area_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 st.metric(label=f"Área disponível em {estado}", value=f"{area_formatada}\nha")
 
-    # 🔥 MAPA DE DISTRIBUIÇÃO REGIONAL AGCO PRIME
+    # 🔥 MAPA DE CALOR ESTÁVEL
     from streamlit_folium import st_folium
     import folium
     from folium.plugins import HeatMap
@@ -155,7 +151,7 @@ if listas_dfs:
         
     if dados_calor:
         HeatMap(dados_calor, radius=24, blur=18, max_zoom=10).add_to(mapa)
-        st_folium(mapa, width=1200, height=480, key="mapa_final_agco_v13")
+        st_folium(mapa, width=1200, height=480, key="mapa_final_agco_v14")
 
     st.markdown("---")
     aba_ind, aba_con = st.tabs(["📋 Lista de Fazendas com Aptidão", "🎯 Maiores Polos de Expansão"])
